@@ -1,25 +1,27 @@
 # vagrant-kubernetes-cluster
 
+**_一键安装 Kubernetes 集群。符合中国国情，具有社会主义特色。包含 MetricsServer 、Kuboard 、Kubernetes Dashboard 等。_**
 
+**安装环境**：
 
-***一键安装Kubernetes集群。符合中国国情，具有社会主义特色。包含 MetricsServer 、Kuboard 、Kubernetes Dashboard等。***
-
-
-
-**安装条件**：
-
-* Vagrant 版本： 2.2.18
-* VirtualBox 版本： 6.1.26
+- Vagrant 版本： 2.2.18
+- VirtualBox 版本： 6.1.26
 
 虚拟机网卡设置如图所示：
 
 ![image-20211012134939433](Screenshots/image-20211012134939433.png)
 
-**安装环境**：
+**CentOS7 环境安装版本**：
 
-* Ubuntu 版本： 20.04.2 LTS
-* Containerd 版本： 1.5.5
-* Kubernetes 版本： v1.22.0
+- Ubuntu 版本： centos7
+- Containerd 版本： 1.4.11
+- Kubernetes 版本： v1.22.2
+
+**Ubuntu 环境安装版本**：
+
+- Ubuntu 版本： 20.04.2 LTS
+- Containerd 版本： 1.5.5
+- Kubernetes 版本： v1.22.0
 
 ## 一键安装
 
@@ -180,7 +182,7 @@ Bringing machine 'kworker2' up with 'virtualbox' provider...
     kworker2: [TASK 1] Join node to Kubernetes Cluster
 ```
 
-> 安装后三台机器的IP为：
+> 安装后三台机器的 IP 为：
 
 |  机器名  |       IP       |
 | :------: | :------------: |
@@ -239,7 +241,7 @@ kube-system   service/kube-dns     ClusterIP   10.96.0.10   <none>        53/UDP
 ## 安装 metrics-server
 
 ```bash
-root@kmaster:/vagrant/metrics# kubectl apply -f metrics.yaml 
+root@kmaster:/vagrant/metrics# kubectl apply -f metrics.yaml
 serviceaccount/metrics-server created
 clusterrole.rbac.authorization.k8s.io/system:aggregated-metrics-reader created
 clusterrole.rbac.authorization.k8s.io/system:metrics-server created
@@ -251,7 +253,7 @@ deployment.apps/metrics-server created
 apiservice.apiregistration.k8s.io/v1beta1.metrics.k8s.io created
 ```
 
-##  安装 kuboard
+## 安装 kuboard
 
 ```bash
 root@kmaster:~# kubectl apply -f https://addons.kuboard.cn/kuboard/kuboard-v3.yaml
@@ -265,20 +267,18 @@ service/kuboard-v3 created
 
 ```
 
-访问kuboard http://192.168.56.100:30080
+访问 kuboard http://192.168.56.100:30080
 
 > 用户名： admin
 > 密码： Kuboard123
 
 ![image-20211012140900479](Screenshots/image-20211012140900479.png)
 
-
-
 ## 安装 kubernetes-dashboard
 
 ```bash
 
-root@kmaster:/vagrant/kubernetes-dashboard# kubectl apply -f kubernetes-dashboard.yaml 
+root@kmaster:/vagrant/kubernetes-dashboard# kubectl apply -f kubernetes-dashboard.yaml
 namespace/kubernetes-dashboard created
 serviceaccount/kubernetes-dashboard created
 service/kubernetes-dashboard created
@@ -297,7 +297,7 @@ deployment.apps/dashboard-metrics-scraper created
 serviceaccount/admin-user created
 clusterrolebinding.rbac.authorization.k8s.io/admin-user created
 
-# 执行下面命令后手动将type: ClusterIP 改为 type: NodePort 
+# 执行下面命令后手动将type: ClusterIP 改为 type: NodePort
 root@kmaster:~# kubectl edit svc kubernetes-dashboard -n kubernetes-dashboard
 
 # 查看svc，放行端口
@@ -307,16 +307,15 @@ kubernetes-dashboard   dashboard-metrics-scraper   ClusterIP   10.111.109.182   
 kubernetes-dashboard   kubernetes-dashboard        NodePort    10.97.250.165    <none>        443:31825/TCP                                  2m53s
 
 
-# 获取访问令牌 
+# 获取访问令牌
 root@kmaster:~# kubectl -n kubernetes-dashboard get secret $(kubectl -n kubernetes-dashboard get sa/admin-user -o jsonpath="{.secrets[0].name}") -o go-template="{{.data.token | base64decode}}"
 
 eyJhbGciOiJSUzI1NiIsImtpZCI6Ik9BODl1TGtTRjUzWUl4dnJKUHdpYnB1V0RIZGpxNkxoT2VMWEEzNW1yVk0ifQ.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJrdWJlcm5ldGVzLWRhc2hib2FyZCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VjcmV0Lm5hbWUiOiJhZG1pbi11c2VyLXRva2VuLXdtN3hqIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQubmFtZSI6ImFkbWluLXVzZXIiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiIzNzAzOGNhZC1jYjE2LTQ3ZjAtYTIxZS1hODNlNjhjYjA4ZGMiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6a3ViZXJuZXRlcy1kYXNoYm9hcmQ6YWRtaW4tdXNlciJ9.iPxLZnueJz9y2ngFTtgEuZ36Ae0QLK2oFXEBXinYcsM5712_sw3iyYODB9Eyu9AzscMDin-jL4ssctl6dQt-3PD6vdrLjSWAlDNK_PXXYlnFCTehrcFjZNGWv3yM7e5dfUOqmrl0ROwYEKFtF93sQAYPtXHZUqDnQOQ15VE-NVd7RyCgHHNtCiV_UeDrRg7M0YBvPtL24w35MaaKyeLIs_YWZpNgjV3zNfdl86Lo3SEoU0_nVAqwZzBroUxrE6ekBDGisWvQ6NtrEZLRTgk2izPCUiT3XOj4bENwf3Ba1bCKGvIzmWx41KIVdNamN_c1YOiY1HL__1ryKwMad4JR-w
 ```
 
-访问kubernetes-dashboard https://192.168.56.100:31825
+访问 kubernetes-dashboard https://192.168.56.100:31825
 
 ![image-20211012140957412](Screenshots/image-20211012140957412.png)
-
 
 ## 集群概况
 

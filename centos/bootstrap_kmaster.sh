@@ -1,5 +1,7 @@
 #!/bin/bash
 
+POD_CIDR="172.168.0.0/16"
+
 echo "[TASK 1] Pull required containers"
 # 国内环境会卡死在这，采用下面曲线救国的方式来解决
 # kubeadm config images pull >/dev/null 2>&1
@@ -31,10 +33,12 @@ kubeadm init \
   --kubernetes-version v1.22.2 \
   --image-repository registry.aliyuncs.com/k8sxio \
   --service-cidr=10.96.0.0/16 \
-  --pod-network-cidr=192.168.0.0/16 > /root/kubeinit.log 2>/dev/null
+  --pod-network-cidr=${POD_CIDR} > /root/kubeinit.log 2>/dev/null
 
 echo "[TASK 3] Deploy Calico network"
-kubectl --kubeconfig=/etc/kubernetes/admin.conf create -f https://docs.projectcalico.org/v3.18/manifests/calico.yaml >/dev/null 2>&1
+curl -s https://docs.projectcalico.org/v3.18/manifests/calico.yaml > /root/calico.yaml
+sed -i 's@# - name: CALICO_IPV4POOL_CIDR@- name: CALICO_IPV4POOL_CIDR@g; s@#   value: "192.168.0.0/16"@  value: '"${POD_CIDR}"'@g' /root/calico.yaml
+kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /root/calico.yaml >/dev/null 2>&1
 
 echo "[TASK 4] Generate and save cluster join command to /joincluster.sh"
 kubeadm token create --print-join-command > /root/joincluster.sh 2>/dev/null

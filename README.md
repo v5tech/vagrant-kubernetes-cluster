@@ -350,3 +350,350 @@ kuboard                pod/kuboard-etcd-th9nq                           1/1     
 kuboard                pod/kuboard-questdb-68d5bfb5b-2tnwf              1/1     Running   0               6m26s   192.168.189.7    kmaster    <none>           <none>
 kuboard                pod/kuboard-v3-5fc46b5557-44hlj                  1/1     Running   0               8m39s   192.168.189.4    kmaster    <none>           <none>
 ```
+
+## 安装KubePi
+
+https://kubeoperator.io/docs/kubepi/install/
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/KubeOperator/KubePi/master/docs/deploy/kubectl/kubepi.yaml
+```
+
+获取访问地址
+
+```bash
+# 获取 NodeIp
+export NODE_IP=$(kubectl get nodes -o jsonpath="{.items[0].status.addresses[0].address}")
+
+# 获取 NodePort
+export NODE_PORT=$(kubectl -n kube-system get services kubepi -o jsonpath="{.spec.ports[0].nodePort}")
+
+# 获取 Address
+echo http://$NODE_IP:$NODE_PORT
+```
+
+登录
+
+```
+地址: http://$NODE_IP:$NODE_PORT
+用户名: admin
+密码: kubepi
+```
+
+导入集群，获取token
+
+```bash
+kubectl -n kubernetes-dashboard get secret $(kubectl -n kubernetes-dashboard get sa/admin-user -o jsonpath="{.secrets[0].name}") -o go-template="{{.data.token | base64decode}}"
+```
+
+![2021-10-28_134300.png](Screenshots/2021-10-28_134300.png)
+
+![2021-10-28_134337.png](Screenshots/2021-10-28_134337.png)
+
+![2021-10-28_134639.png](Screenshots/2021-10-28_134639.png)
+
+---
+
+**以下环境需要调整虚拟机配置，至少需4核8G内存**
+
+## 安装KubeSphere
+
+### 安装KubeSphere前置环境
+
+安装nfs文件系统
+
+#### 安装nfs-server
+
+```bash
+# 在每个机器。
+yum install -y nfs-utils
+
+# 在kmaster 执行以下命令 192.168.56.100
+echo "/nfs/data/ *(insecure,rw,sync,no_root_squash)" > /etc/exports
+
+# 执行以下命令，启动 nfs 服务;创建共享目录
+mkdir -p /nfs/data
+
+# 在master执行
+systemctl enable rpcbind
+systemctl enable nfs-server
+systemctl start rpcbind
+systemctl start nfs-server
+
+# 使配置生效
+exportfs -r
+
+#检查配置是否生效
+exportfs
+```
+
+#### 配置nfs-client
+
+```bash
+showmount -e 192.168.56.100
+mkdir -p /nfs/data
+mount -t nfs 192.168.56.100:/nfs/data /nfs/data
+```
+
+#### 配置默认存储
+
+配置动态供应的默认存储类
+
+```yaml
+## 创建了一个存储类
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-storage
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: k8s-sigs.io/nfs-subdir-external-provisioner
+parameters:
+  archiveOnDelete: "true"  ## 删除pv的时候，pv的内容是否要备份
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nfs-client-provisioner
+  labels:
+    app: nfs-client-provisioner
+  # replace with namespace where provisioner is deployed
+  namespace: default
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nfs-client-provisioner
+  template:
+    metadata:
+      labels:
+        app: nfs-client-provisioner
+    spec:
+      serviceAccountName: nfs-client-provisioner
+      containers:
+        - name: nfs-client-provisioner
+          image: docker.io/v5cn/nfs-subdir-external-provisioner:v4.0.2
+          # resources:
+          #    limits:
+          #      cpu: 10m
+          #    requests:
+          #      cpu: 10m
+          volumeMounts:
+            - name: nfs-client-root
+              mountPath: /persistentvolumes
+          env:
+            - name: PROVISIONER_NAME
+              value: k8s-sigs.io/nfs-subdir-external-provisioner
+            - name: NFS_SERVER
+              value: 192.168.56.100 ## 指定自己nfs服务器地址
+            - name: NFS_PATH  
+              value: /nfs/data  ## nfs服务器共享的目录
+      volumes:
+        - name: nfs-client-root
+          nfs:
+            server: 192.168.56.100
+            path: /nfs/data
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nfs-client-provisioner
+  # replace with namespace where provisioner is deployed
+  namespace: default
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: nfs-client-provisioner-runner
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list", "watch", "update"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "update", "patch"]
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: run-nfs-client-provisioner
+subjects:
+  - kind: ServiceAccount
+    name: nfs-client-provisioner
+    # replace with namespace where provisioner is deployed
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: nfs-client-provisioner-runner
+  apiGroup: rbac.authorization.k8s.io
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: leader-locking-nfs-client-provisioner
+  # replace with namespace where provisioner is deployed
+  namespace: default
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: leader-locking-nfs-client-provisioner
+  # replace with namespace where provisioner is deployed
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: nfs-client-provisioner
+    # replace with namespace where provisioner is deployed
+    namespace: default
+roleRef:
+  kind: Role
+  name: leader-locking-nfs-client-provisioner
+  apiGroup: rbac.authorization.k8s.io
+```
+
+#### 确认配置是否生效
+
+```bash
+kubectl get sc
+```
+
+
+### 安装KubeSphere
+
+*KubeSphere目前还不支持kubernetes 1.22,这部分内容稍后就来...*
+
+
+
+
+
+## 安装Kubernetes集群监控prometheus-operator
+
+
+
+### 查看集群信息
+
+```bash
+kubectl cluster-info
+```
+
+### 克隆prometheus-operator
+
+```bash
+git clone https://github.com/prometheus-operator/kube-prometheus.git
+cd kube-prometheus
+```
+
+### 创建namespace, CustomResourceDefinitions & operator pod
+
+> 因为原配置里面的好多镜拉取不下来，因此应用修改过的配置文件(当前目录下的kube-prometheus)
+
+```bash
+kubectl apply -f manifests/setup
+```
+
+### 查看namespace
+
+```bash
+kubectl get ns monitoring
+```
+
+### 查看pod
+
+```bash
+kubectl get pods -n monitoring
+```
+
+### 应用部署配置文件
+
+```bash
+kubectl apply -f manifests/
+```
+
+### 查看pods,svc
+
+```bash
+kubectl get pods,svc -n monitoring
+```
+
+### 调整SVC访问方式
+
+Prometheus:
+
+```bash
+kubectl --namespace monitoring patch svc prometheus-k8s -p '{"spec": {"type": "NodePort"}}'
+```
+
+Alertmanager:
+
+```bash
+kubectl --namespace monitoring patch svc alertmanager-main -p '{"spec": {"type": "NodePort"}}'
+```
+
+Grafana:
+
+```bash
+kubectl --namespace monitoring patch svc grafana -p '{"spec": {"type": "NodePort"}}'
+```
+
+### 查看端口
+
+```bash
+$ kubectl -n monitoring get svc  | grep NodePort
+alertmanager-main       NodePort    10.96.212.116   <none>        9093:30496/TCP,8080:30519/TCP   7m53s
+grafana                 NodePort    10.96.216.187   <none>        3000:31045/TCP                  7m50s
+prometheus-k8s          NodePort    10.96.180.95    <none>        9090:30253/TCP,8080:30023/TCP   7m44s
+```
+
+访问 Grafana Dashboard
+
+http://192.168.56.100:31045
+
+```
+Username: admin
+Password: admin
+```
+
+![2021-10-29_162836.png](Screenshots/2021-10-29_162836.png)
+
+![2021-10-29_163551.png](Screenshots/2021-10-29_163551.png)
+
+![2021-10-29_163637.png](Screenshots/2021-10-29_163637.png)
+
+![2021-10-29_163837.png](Screenshots/2021-10-29_163837.png)
+
+![2021-10-29_164027.png](Screenshots/2021-10-29_164027.png)
+
+
+访问 Prometheus Dashboard 
+
+http://192.168.56.100:30253
+
+
+访问 Alert Manager Dashboard 
+
+http://192.168.56.100:30496
+
+
+### 销毁prometheus-operator监控服务
+
+```bash
+kubectl delete --ignore-not-found=true -f manifests/ -f manifests/setup
+```
+
+https://computingforgeeks.com/setup-prometheus-and-grafana-on-kubernetes

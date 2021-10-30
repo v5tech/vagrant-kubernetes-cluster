@@ -1,6 +1,6 @@
 # vagrant-kubernetes-cluster
 
-**_一键安装 Kubernetes 集群。符合中国国情，具有社会主义特色。包含 MetricsServer 、Kuboard 、Kubernetes Dashboard 等。_**
+**_Vagrant一键安装Kubernetes集群。安装 Metrics Server 、Kuboard 、Kubernetes Dashboard、KubePi、Kubernetes集群监控prometheus-operator等。_**
 
 **安装环境**：
 

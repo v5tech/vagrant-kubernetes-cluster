@@ -13,7 +13,7 @@
 
 **CentOS7 环境安装版本**：
 
-- Ubuntu 版本： centos7
+- CentOS 版本： centos7
 - Containerd 版本： 1.4.11
 - Kubernetes 版本： v1.22.2
 
